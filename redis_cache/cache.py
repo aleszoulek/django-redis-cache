@@ -1,4 +1,5 @@
 from django.core.cache.backends.base import BaseCache, InvalidCacheBackendError
+from django.core.exceptions import ImproperlyConfigured
 from django.utils.encoding import smart_unicode, smart_str
 from django.utils.datastructures import SortedDict
 
@@ -13,31 +14,6 @@ except ImportError:
     raise InvalidCacheBackendError(
         "Redis cache backend requires the 'redis-py' library")
 
-
-class ImproperlyConfigured(Exception):
-    "Django Redis Cache is somehow improperly configured"
-    pass
-
-
-class CacheConnectionPool(object):
-    _connection_pool = None
-
-    def get_connection_pool(self, host='127.0.0.1', port=6379, db=1, password=None,
-        socket_timeout=None, connection_pool=None, charset='utf-8', errors='strict'):
-        if self._connection_pool is None:
-            kwargs = {
-                'db': db,
-                'password': password,
-                'socket_timeout': socket_timeout,
-                'encoding': charset,
-                'encoding_errors': errors,
-                'host': host,
-                'port': port
-            }
-            self._connection_pool = redis.ConnectionPool(**kwargs)
-        return self._connection_pool
-pool = CacheConnectionPool()
-pool_read = CacheConnectionPool()
 
 class CacheKey(object):
     """
@@ -75,15 +51,12 @@ class CacheClass(BaseCache):
             raise ImproperlyConfigured('You can define only one slave host')
         # Set master connection
         master_host, master_port = self._parse_server(servers[0])
-        self._cache = redis.Redis(host=master_host, port=master_port, db=db,
-            password=password, connection_pool=pool.get_connection_pool(host=master_host, port=master_port, db=db, password=password))
+        self._cache = redis.Redis(host=master_host, port=master_port, db=db, password=password)
         self._cache_read = self._cache
         if len(servers) == 2:
             # Set slave connection
             slave_host, slave_port = self._parse_server(servers[1])
-            self._cache_read = redis.Redis(host=slave_host, port=slave_port, db=db,
-                password=password, connection_pool=pool_read.get_connection_pool(host=slave_host, port=slave_port, db=db, password=password))
-
+            self._cache_read = redis.Redis(host=slave_host, port=slave_port, db=db, password=password)
 
     def _parse_server(self, server):
         if ':' in server:
