@@ -124,7 +124,7 @@ class CacheClass(BaseCache):
         Returns unpickled value if key is found, the default if not.
         """
         key = self.make_key(key, version=version)
-        value = self._cache.get(key)
+        value = self._cache_read.get(key)
         if value is None:
             return default
         return self.unpickle(value)
@@ -179,7 +179,7 @@ class CacheClass(BaseCache):
         recovered_data = SortedDict()
         new_keys = map(lambda key: self.make_key(key, version=version), keys)
         map_keys = dict(zip(new_keys, keys))
-        results = self._cache.mget(new_keys)
+        results = self._cache_read.mget(new_keys)
         for key, value in zip(new_keys, results):
             if value is None:
                 continue

@@ -56,11 +56,22 @@ class RedisCacheTests(TestCase):
         self.assertEqual(self.cache._cache.connection_pool.connection_kwargs['port'], 6379)
 
     def test_slave_redis_configuration(self):
+        # One master
+        self.cache = self.get_cache('redis_cache.cache://127.0.0.1:6379')
+        self.assertEqual(self.cache._cache.connection_pool.connection_kwargs['host'], '127.0.0.1')
+        self.assertEqual(self.cache._cache.connection_pool.connection_kwargs['port'], 6379)
+        self.assertEqual(self.cache._cache_read.connection_pool.connection_kwargs['host'], '127.0.0.1')
+        self.assertEqual(self.cache._cache_read.connection_pool.connection_kwargs['port'], 6379)
+
+        # One master, one slave
         self.cache = self.get_cache('redis_cache.cache://127.0.0.1:6379;127.0.0.2:6378')
         self.assertEqual(self.cache._cache.connection_pool.connection_kwargs['host'], '127.0.0.1')
         self.assertEqual(self.cache._cache.connection_pool.connection_kwargs['port'], 6379)
         self.assertEqual(self.cache._cache_read.connection_pool.connection_kwargs['host'], '127.0.0.2')
         self.assertEqual(self.cache._cache_read.connection_pool.connection_kwargs['port'], 6378)
+
+        # One master, more slaves
+        self.assertRaises(ImproperlyConfigured, self.get_cache,  'redis_cache.cache://127.0.0.1:6379;127.0.0.2:6378;127.0.0.3:6377')
 
     def test_simple(self):
         # Simple cache set/get works
