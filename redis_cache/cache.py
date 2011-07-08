@@ -37,6 +37,7 @@ class CacheConnectionPool(object):
             self._connection_pool = redis.ConnectionPool(**kwargs)
         return self._connection_pool
 pool = CacheConnectionPool()
+pool_read = CacheConnectionPool()
 
 class CacheKey(object):
     """
@@ -68,6 +69,23 @@ class CacheClass(BaseCache):
             db = int(db)
         except (ValueError, TypeError):
             raise ImproperlyConfigured("db value must be an integer")
+        servers = server.split(';')
+        if len(servers) > 2:
+            # We support only one slave server
+            raise ImproperlyConfigured('You can define only one slave host')
+        # Set master connection
+        master_host, master_port = self._parse_server(servers[0])
+        self._cache = redis.Redis(host=master_host, port=master_port, db=db,
+            password=password, connection_pool=pool.get_connection_pool(host=master_host, port=master_port, db=db, password=password))
+        self._cache_read = self._cache
+        if len(servers) == 2:
+            # Set slave connection
+            slave_host, slave_port = self._parse_server(servers[1])
+            self._cache_read = redis.Redis(host=slave_host, port=slave_port, db=db,
+                password=password, connection_pool=pool_read.get_connection_pool(host=slave_host, port=slave_port, db=db, password=password))
+
+
+    def _parse_server(self, server):
         if ':' in server:
             host, port = server.split(':')
             try:
@@ -77,9 +95,7 @@ class CacheClass(BaseCache):
         else:
             host = server or 'localhost'
             port = 6379
-        self._cache = redis.Redis(host=host, port=port, db=db,
-            password=password, connection_pool=pool.get_connection_pool(host=host, port=port, db=db, password=password))
-
+        return host, port
 
     def make_key(self, key, version=None):
         """

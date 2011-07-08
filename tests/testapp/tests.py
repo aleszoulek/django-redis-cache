@@ -55,6 +55,13 @@ class RedisCacheTests(TestCase):
         self.assertEqual(self.cache._cache.connection_pool.connection_kwargs['db'], 1)
         self.assertEqual(self.cache._cache.connection_pool.connection_kwargs['port'], 6379)
 
+    def test_slave_redis_configuration(self):
+        self.cache = self.get_cache('redis_cache.cache://127.0.0.1:6379;127.0.0.2:6378')
+        self.assertEqual(self.cache._cache.connection_pool.connection_kwargs['host'], '127.0.0.1')
+        self.assertEqual(self.cache._cache.connection_pool.connection_kwargs['port'], 6379)
+        self.assertEqual(self.cache._cache_read.connection_pool.connection_kwargs['host'], '127.0.0.2')
+        self.assertEqual(self.cache._cache_read.connection_pool.connection_kwargs['port'], 6378)
+
     def test_simple(self):
         # Simple cache set/get works
         self.cache.set("key", "value")
