@@ -28,6 +28,9 @@ class CacheKey(object):
     def __str__(self):
         return self.__unicode__()
 
+    def __repr__(self):
+        return self.__unicode__()
+
     def __unicode__(self):
         return smart_str(self._key)
 
@@ -37,7 +40,12 @@ class CacheClass(BaseCache):
         """
         Connect to Redis, and set up cache backend.
         """
+        self._init(server, params)
         super(CacheClass, self).__init__(params)
+
+    def _init(self, server, params):
+        super(CacheClass, self).__init__(params)
+        self._initargs = { 'server': server, 'params': params }
         options = params.get('OPTIONS', {})
         password = params.get('password', options.get('PASSWORD', None))
         db = params.get('db', options.get('DB', 1))
@@ -70,6 +78,17 @@ class CacheClass(BaseCache):
             port = 6379
         return host, port
 
+    def __getstate__(self):
+        return self._initargs
+
+    def __setstate__(self, state):
+        self._init(**state)
+
+    def close(self, **kwargs):
+        for r in (self._cache, self._cache_read):
+            for c in r.connection_pool._available_connections:
+                c.disconnect()
+
     def make_key(self, key, version=None):
         """
         Returns the utf-8 encoded bytestring of the given key as a CacheKey
@@ -100,7 +119,12 @@ class CacheClass(BaseCache):
         value = self._cache_read.get(key)
         if value is None:
             return default
-        return self.unpickle(value)
+        try:
+            result = int(value)
+        except (ValueError, TypeError):
+            result = self.unpickle(value)
+        return result
+
 
     def set(self, key, value, timeout=None, version=None, client=None):
         """
@@ -109,11 +133,14 @@ class CacheClass(BaseCache):
         if not client:
             client = self._cache
         key = self.make_key(key, version=version)
-        # get timout
         if not timeout:
             timeout = self.default_timeout
-        # store the pickled value
-        result = self._cache.setex(key, pickle.dumps(value), timeout)
+        try:
+            value = int(value)
+        except (ValueError, TypeError):
+            result = client.setex(key, pickle.dumps(value), int(timeout))
+        else:
+            result = client.setex(key, value, int(timeout))
         # result is a boolean
         return result
 
@@ -149,6 +176,8 @@ class CacheClass(BaseCache):
         """
         Retrieve many keys.
         """
+        if not keys:
+            return {}
         recovered_data = SortedDict()
         new_keys = map(lambda key: self.make_key(key, version=version), keys)
         map_keys = dict(zip(new_keys, keys))
@@ -156,7 +185,10 @@ class CacheClass(BaseCache):
         for key, value in zip(new_keys, results):
             if value is None:
                 continue
-            value = self.unpickle(value)
+            try:
+                value = int(value)
+            except (ValueError, TypeError):
+                value = self.unpickle(value)
             if isinstance(value, basestring):
                 value = smart_unicode(value)
             recovered_data[map_keys[key]] = value
@@ -174,6 +206,22 @@ class CacheClass(BaseCache):
         for key, value in data.iteritems():
             self.set(key, value, timeout, version=version, client=pipeline)
         pipeline.execute()
+
+    def incr(self, key, delta=1, version=None):
+        """
+        Add delta to value in the cache. If the key does not exist, raise a
+        ValueError exception.
+        """
+        key = self.make_key(key, version=version)
+        exists = self._cache.exists(key)
+        if not exists:
+            raise ValueError("Key '%s' not found" % key)
+        try:
+            value = self._cache.incr(key, delta)
+        except redis.ResponseError:
+            value = self.get(key) + 1
+            self.set(key, value)
+        return value
 
 
 class RedisCache(CacheClass):
