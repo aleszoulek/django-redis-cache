@@ -45,7 +45,10 @@ class CacheClass(BaseCache):
             db = int(db)
         except (ValueError, TypeError):
             raise ImproperlyConfigured("db value must be an integer")
-        servers = server.split(';')
+        if isinstance(server, (list, tuple)):
+            servers = server
+        else:
+            servers = server.split(';')
         if len(servers) > 2:
             # We support only one slave server
             raise ImproperlyConfigured('You can define only one slave host')
