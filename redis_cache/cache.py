@@ -61,17 +61,19 @@ class CacheClass(BaseCache):
             # We support only one slave server
             raise ImproperlyConfigured('You can define only one slave host')
         # Set master connection
-        master_host, master_port = self._parse_server(servers[0])
-        self._cache = redis.Redis(host=master_host, port=master_port, db=db, password=password)
+        master_host, master_port, unix_socket_path = self._parse_server(servers[0])
+        self._cache = redis.Redis(host=master_host, port=master_port, db=db, password=password, unix_socket_path=unix_socket_path)
         self._cache_read = self._cache
         if len(servers) == 2:
             # Set slave connection
-            slave_host, slave_port = self._parse_server(servers[1])
-            self._cache_read = redis.Redis(host=slave_host, port=slave_port, db=db, password=password)
+            slave_host, slave_port, unix_socket_path = self._parse_server(servers[1])
+            self._cache_read = redis.Redis(host=slave_host, port=slave_port, db=db, password=password, unix_socket_path=unix_socket_path)
 
     def _parse_server(self, server):
         if ':' in server:
             host, port = server.split(':')
+            if host == 'unix':
+                return None, None, port
             try:
                 port = int(port)
             except (ValueError, TypeError):
@@ -79,7 +81,7 @@ class CacheClass(BaseCache):
         else:
             host = server or 'localhost'
             port = 6379
-        return host, port
+        return host, port, None
 
     def __getstate__(self):
         return self._initargs
